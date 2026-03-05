@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f1e8;
+  --surface: #fffaf0;
+  --foreground: #102332;
+  --muted: #5e7385;
+  --teal: #0f766e;
+  --amber: #d97706;
+  --rose: #be185d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 8% -10%, #ffe4b8 0%, transparent 40%),
+    radial-gradient(circle at 92% 0%, #b3f0e8 0%, transparent 35%),
+    linear-gradient(180deg, #f6f1e8 0%, #f0e7da 100%);
+  color: var(--foreground);
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
