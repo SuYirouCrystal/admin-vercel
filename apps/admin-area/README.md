@@ -13,14 +13,15 @@ Superadmin-only control center for the Supabase-backed dataset.
 - Users/profiles: `READ` only (`/admin/profiles`)
 - Images: `CREATE/READ/UPDATE/DELETE` (`/admin/images`)
 - Captions: `READ` only (`/admin/captions`)
-- Every admin route is behind a login wall.
+- Every admin route is behind a Google login wall.
 - Only users with `profiles.is_superadmin = true` can access admin pages/actions.
 
 ## Security model
 
-1. `middleware.ts` protects `/admin/*` and redirects unauthenticated users to `/login`.
+1. `proxy.ts` protects `/admin/*` and redirects unauthenticated users to `/login`.
 2. `requireSuperadmin()` is enforced in admin layout and server actions.
 3. Server actions use `SUPABASE_SERVICE_ROLE_KEY` only after superadmin verification.
+4. Login uses Supabase Google OAuth, then `/auth/callback` exchanges the auth code for a server session.
 
 No RLS policies are changed by this app.
 

@@ -38,7 +38,8 @@ export default async function LoginPage() {
             Superadmin Control Center
           </h1>
           <p className="max-w-xl text-base leading-relaxed text-[var(--muted)]">
-            Every admin route is gated. Access is granted only when your profile row has
+            Every admin route is behind a Google login wall. Access is granted only when your
+            profile row has
             <code className="mx-1 rounded bg-slate-200 px-1 py-0.5 text-xs">is_superadmin = true</code>.
           </p>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
