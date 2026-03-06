@@ -1,51 +1,29 @@
-import CaptionWorkbench from "@/components/caption-workbench";
-import { createPublicSupabaseClient } from "@/lib/supabase";
+import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
-type Row = Record<string, unknown>;
-
-export default async function HomePage() {
-  let images: Row[] = [];
-  let captions: Row[] = [];
-  let error: string | null = null;
-
-  try {
-    const supabase = createPublicSupabaseClient();
-
-    const [imagesResult, captionsResult] = await Promise.all([
-      supabase.from("images").select("*").limit(80).order("created_at", { ascending: false }),
-      supabase
-        .from("captions")
-        .select("*")
-        .limit(120)
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (imagesResult.error) {
-      throw new Error(imagesResult.error.message);
-    }
-    if (captionsResult.error) {
-      throw new Error(captionsResult.error.message);
-    }
-
-    images = (imagesResult.data ?? []) as Row[];
-    captions = (captionsResult.data ?? []) as Row[];
-  } catch (unknownError) {
-    error = unknownError instanceof Error ? unknownError.message : "Unable to load data.";
-  }
-
+export default function HomePage() {
   return (
-    <main className="mx-auto w-full max-w-6xl px-5 py-8 md:px-8 md:py-10">
-      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold tracking-wide text-indigo-700 uppercase">App one</p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900">Caption Creation and Rating</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Create caption entries and score existing captions from a single workspace.
+    <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-5 py-10 md:px-8">
+      <section className="w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:p-10">
+        <p className="text-xs font-semibold tracking-wide text-indigo-700 uppercase">
+          Assignment #2
         </p>
-      </section>
+        <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">
+          Next.js + Supabase list page
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 md:text-base">
+          This app reads from Supabase using environment variables and renders rows from a
+          pre-existing table on a dedicated list page.
+        </p>
 
-      <CaptionWorkbench initialImages={images} initialCaptions={captions} initialError={error} />
+        <div className="mt-6">
+          <Link
+            href="/list"
+            className="inline-flex rounded-xl bg-indigo-700 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-800"
+          >
+            View dorm list
+          </Link>
+        </div>
+      </section>
     </main>
   );
 }

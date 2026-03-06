@@ -1,23 +1,27 @@
-# Caption Creation and Rating App
+# Assignment #2: Supabase List Page
 
-Simple app for caption entry and caption rating workflows.
+This app extends Assignment #1 by reading data from Supabase and rendering it on a list page.
 
-## Features
+## What it does
 
-- Reads recent `images` and `captions` rows from Supabase.
-- Create a caption row from the UI.
-- Submit/update a numeric rating on a caption.
+- Uses environment variables for Supabase credentials (no hardcoded credentials in app code).
+- Reads from a pre-existing table: `dorms`.
+- Renders rows on `/list` in a table format.
 
 ## Environment variables
 
-Create `apps/caption-rating/.env.local` from `.env.example`:
+Copy `.env.example` to `.env.local`:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+cp .env.example .env.local
 ```
 
-## Run locally
+The file includes:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+## Local run
 
 ```bash
 cd apps/caption-rating
@@ -25,4 +29,12 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+- Home: `http://localhost:3000`
+- List page: `http://localhost:3000/list`
+
+## Deployment (Vercel)
+
+1. Push latest commit to GitHub.
+2. Deploy this app root (`apps/caption-rating`) on Vercel.
+3. Add both environment variables in Vercel project settings.
+4. Disable Deployment Protection in Vercel so Incognito access works.
