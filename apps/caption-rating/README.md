@@ -1,12 +1,22 @@
-# Assignment #2: Supabase List Page
+# Caption App: Supabase + Pipeline
 
-This app extends Assignment #1 by reading data from Supabase and rendering it on a list page.
+This app now supports both:
 
-## What it does
+- Supabase read list page (`/list`) from pre-existing `dorms` table.
+- Image upload + caption generation pipeline on `/`.
 
-- Uses environment variables for Supabase credentials (no hardcoded credentials in app code).
-- Reads from a pre-existing table: `dorms`.
-- Renders rows on `/list` in a table format.
+## Pipeline flow implemented
+
+The home page executes the required sequence:
+
+1. `POST /pipeline/generate-presigned-url`
+2. `PUT` image bytes to returned `presignedUrl`
+3. `POST /pipeline/upload-image-from-url`
+4. `POST /pipeline/generate-captions`
+
+Base URL:
+
+- `https://api.almostcrackd.ai`
 
 ## Environment variables
 
@@ -16,10 +26,20 @@ Copy `.env.example` to `.env.local`:
 cp .env.example .env.local
 ```
 
-The file includes:
+Variables:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_PIPELINE_API_BASE_URL`
+
+## JWT token
+
+The pipeline form requires a valid JWT access token entered in the UI.
+Every API request sends:
+
+```http
+Authorization: Bearer <token>
+```
 
 ## Local run
 
@@ -29,12 +49,12 @@ npm install
 npm run dev
 ```
 
-- Home: `http://localhost:3000`
-- List page: `http://localhost:3000/list`
+- Pipeline page: `http://localhost:3000`
+- Supabase list page: `http://localhost:3000/list`
 
-## Deployment (Vercel)
+## Deploy to Vercel
 
 1. Push latest commit to GitHub.
-2. Deploy this app root (`apps/caption-rating`) on Vercel.
-3. Add both environment variables in Vercel project settings.
-4. Disable Deployment Protection in Vercel so Incognito access works.
+2. Deploy `apps/caption-rating` on Vercel.
+3. Configure all env vars in Vercel project settings.
+4. Disable Deployment Protection to test in Incognito.
