@@ -11,8 +11,12 @@ Superadmin-only control center for the Supabase-backed dataset.
   - busiest upload day
   - top uploaders and top caption writers
 - Users/profiles: `READ` only (`/admin/profiles`)
-- Images: `CREATE/READ/UPDATE/DELETE` (`/admin/images`)
+- Images: `CREATE/READ/UPDATE/DELETE` + upload (`/admin/images`)
 - Captions: `READ` only (`/admin/captions`)
+- Additional admin resources:
+  - `READ`: humor flavors, humor flavor steps, caption requests, LLM prompt chains, LLM responses
+  - `READ/UPDATE`: humor mix
+  - `CRUD`: terms, caption examples, LLM models, LLM providers, allowed signup domains, whitelist emails
 - Every admin route is behind a Google login wall.
 - Only users with `profiles.is_superadmin = true` can access admin pages/actions.
 
@@ -32,6 +36,7 @@ Create `apps/admin-area/.env.local` from `.env.example`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_PIPELINE_API_BASE_URL=https://api.almostcrackd.ai
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 

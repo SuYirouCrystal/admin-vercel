@@ -6,6 +6,7 @@ import {
   type Row,
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
+import ImageUploadPanel from "@/components/image-upload-panel";
 
 import {
   createImageAction,
@@ -89,6 +90,8 @@ export default async function ImagesPage({
           {error}
         </p>
       ) : null}
+
+      <ImageUploadPanel />
 
       <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm">
         <h3 className="text-lg font-semibold text-teal-900">Create image record</h3>
