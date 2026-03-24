@@ -41,6 +41,16 @@ function removePrimaryKey(payload: Row, primaryKeyColumn: string) {
   delete payload[primaryKeyColumn];
 }
 
+function actorIdFromProfile(profile: Row) {
+  const actorId = valueAsString(profile.id).trim();
+
+  if (!actorId) {
+    throw new Error("Unable to determine the acting profile ID.");
+  }
+
+  return actorId;
+}
+
 export async function createResourceRecordAction(formData: FormData) {
   const path = safePath(formData.get("path"));
 
@@ -53,8 +63,13 @@ export async function createResourceRecordAction(formData: FormData) {
       throw new Error("JSON payload cannot be empty.");
     }
 
-    const { adminClient } = await requireSuperadmin();
-    const { error } = await adminClient.from(table).insert(payload);
+    const { adminClient, profile } = await requireSuperadmin();
+    const actorId = actorIdFromProfile(profile);
+    const { error } = await adminClient.from(table).insert({
+      ...payload,
+      created_by_user_id: actorId,
+      modified_by_user_id: actorId,
+    });
     if (error) {
       throw new Error(error.message);
     }
@@ -85,10 +100,14 @@ export async function updateResourceRecordAction(formData: FormData) {
       throw new Error("JSON payload cannot be empty.");
     }
 
-    const { adminClient } = await requireSuperadmin();
+    const { adminClient, profile } = await requireSuperadmin();
+    const actorId = actorIdFromProfile(profile);
     const { error } = await adminClient
       .from(table)
-      .update(payload)
+      .update({
+        ...payload,
+        modified_by_user_id: actorId,
+      })
       .eq(primaryKeyColumn, primaryKeyValue);
 
     if (error) {

@@ -4,6 +4,7 @@ This app now supports both:
 
 - Supabase read list page (`/list`) from pre-existing `dorms` table.
 - Image upload + caption generation pipeline on `/`.
+- Caption creation and caption voting with Google-authenticated writes on `/`.
 
 ## Pipeline flow implemented
 
@@ -40,6 +41,12 @@ Every API request sends:
 ```http
 Authorization: Bearer <token>
 ```
+
+## Caption writes
+
+- Creating a caption now writes to `captions` with the signed-in profile ID in the audit fields.
+- Rating now writes to `caption_votes` instead of a stale `captions.rating` column.
+- Sign in with Google in the UI before creating captions or submitting votes.
 
 ## Local run
 

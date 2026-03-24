@@ -24,7 +24,7 @@ Superadmin-only control center for the Supabase-backed dataset.
 
 1. `proxy.ts` protects `/admin/*` and redirects unauthenticated users to `/login`.
 2. `requireSuperadmin()` is enforced in admin layout and server actions.
-3. Server actions use `SUPABASE_SERVICE_ROLE_KEY` only after superadmin verification.
+3. Server actions run only after superadmin verification.
 4. Login uses Supabase Google OAuth, then `/auth/callback` exchanges the auth code for a server session.
 
 No RLS policies are changed by this app.
@@ -37,7 +37,6 @@ Create `apps/admin-area/.env.local` from `.env.example`:
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_PIPELINE_API_BASE_URL=https://api.almostcrackd.ai
-SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 ## One-time superadmin bootstrap (lockout answer)

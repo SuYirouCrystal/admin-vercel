@@ -7,6 +7,7 @@ import {
   coercePrimaryKey,
   getErrorMessage,
   parseObjectPayload,
+  valueAsString,
   type Row,
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
@@ -19,9 +20,13 @@ function redirectWithMessage(type: "error" | "success", message: string): never 
   redirect(`/admin/images?${params.toString()}`);
 }
 
-async function getAdminClient() {
-  const { adminClient } = await requireSuperadmin();
-  return adminClient;
+async function getAdminContext() {
+  const { adminClient, profile } = await requireSuperadmin();
+
+  return {
+    adminClient,
+    actorId: valueAsString(profile.id),
+  };
 }
 
 function removeId(payload: Row) {
@@ -37,8 +42,12 @@ export async function createImageAction(formData: FormData) {
       throw new Error("JSON payload cannot be empty.");
     }
 
-    const adminClient = await getAdminClient();
-    const { error } = await adminClient.from("images").insert(payload);
+    const { adminClient, actorId } = await getAdminContext();
+    const { error } = await adminClient.from("images").insert({
+      ...payload,
+      created_by_user_id: actorId,
+      modified_by_user_id: actorId,
+    });
 
     if (error) {
       throw new Error(error.message);
@@ -61,8 +70,14 @@ export async function updateImageAction(formData: FormData) {
       throw new Error("JSON payload cannot be empty.");
     }
 
-    const adminClient = await getAdminClient();
-    const { error } = await adminClient.from("images").update(payload).eq("id", id);
+    const { adminClient, actorId } = await getAdminContext();
+    const { error } = await adminClient
+      .from("images")
+      .update({
+        ...payload,
+        modified_by_user_id: actorId,
+      })
+      .eq("id", id);
 
     if (error) {
       throw new Error(error.message);
@@ -79,7 +94,7 @@ export async function deleteImageAction(formData: FormData) {
   try {
     const id = coercePrimaryKey(formData.get("id"));
 
-    const adminClient = await getAdminClient();
+    const { adminClient } = await getAdminContext();
     const { error } = await adminClient.from("images").delete().eq("id", id);
 
     if (error) {

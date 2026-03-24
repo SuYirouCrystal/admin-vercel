@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4efe6;
+  --background-glow: rgba(255, 194, 122, 0.3);
+  --foreground: #1c1d2f;
+  --muted: #5f6278;
+  --surface: rgba(255, 251, 245, 0.9);
+  --surface-muted: rgba(255, 247, 237, 0.78);
+  --line: rgba(78, 74, 106, 0.16);
+  --accent: #d2542f;
+  --accent-contrast: #fff7f2;
+  --accent-soft: rgba(210, 84, 47, 0.14);
+  --secondary: #155e75;
+  --secondary-soft: rgba(21, 94, 117, 0.12);
+  --success-soft: rgba(21, 128, 61, 0.12);
+  --danger-soft: rgba(225, 29, 72, 0.12);
+}
+
+[data-theme="dark"] {
+  --background: #121621;
+  --background-glow: rgba(30, 64, 175, 0.2);
+  --foreground: #f7f5ef;
+  --muted: #afb4c8;
+  --surface: rgba(21, 26, 39, 0.9);
+  --surface-muted: rgba(28, 35, 52, 0.82);
+  --line: rgba(182, 188, 208, 0.18);
+  --accent: #ff7b4c;
+  --accent-contrast: #1a0e09;
+  --accent-soft: rgba(255, 123, 76, 0.18);
+  --secondary: #6dd3f5;
+  --secondary-soft: rgba(109, 211, 245, 0.16);
+  --success-soft: rgba(74, 222, 128, 0.12);
+  --danger-soft: rgba(251, 113, 133, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Fraunces", "Avenir Next", "Trebuchet MS", serif;
+  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 0%, var(--background-glow) 0%, transparent 35%),
+    radial-gradient(circle at 88% 6%, rgba(21, 94, 117, 0.16) 0%, transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 94%, white 6%) 0%, var(--background) 100%);
+  color: var(--foreground);
+  font-family: "Fraunces", "Avenir Next", "Trebuchet MS", serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
