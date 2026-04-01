@@ -2,8 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 let client: ReturnType<typeof createClient> | null = null;
 
-function getEnv(name: string): string {
-  const value = process.env[name];
+function getEnv(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(`Missing environment variable: ${name}`);
   }
@@ -16,8 +15,11 @@ export function createPublicSupabaseClient() {
   }
 
   client = createClient(
-    getEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    getEnv("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL),
+    getEnv(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
   );
 
   return client;

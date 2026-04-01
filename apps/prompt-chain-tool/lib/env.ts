@@ -1,10 +1,4 @@
-const REQUIRED_PUBLIC_ENV = [
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-] as const;
-
-function readEnv(name: string): string {
-  const value = process.env[name];
+function readEnv(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
       `Missing required environment variable: ${name}. Add it to your Vercel project and local .env.local.`
@@ -14,10 +8,14 @@ function readEnv(name: string): string {
 }
 
 export function getPublicSupabaseEnv() {
-  const [urlName, anonName] = REQUIRED_PUBLIC_ENV;
-
   return {
-    url: readEnv(urlName),
-    anonKey: readEnv(anonName),
+    url: readEnv(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      process.env.NEXT_PUBLIC_SUPABASE_URL
+    ),
+    anonKey: readEnv(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ),
   };
 }
