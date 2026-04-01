@@ -21,3 +21,16 @@ export function getPublicSupabaseEnv() {
     ),
   };
 }
+
+export function getServiceRoleSupabaseEnv() {
+  return {
+    url: readEnv(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      process.env.NEXT_PUBLIC_SUPABASE_URL
+    ),
+    serviceRoleKey: readEnv(
+      "SUPABASE_SERVICE_ROLE_KEY",
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    ),
+  };
+}
