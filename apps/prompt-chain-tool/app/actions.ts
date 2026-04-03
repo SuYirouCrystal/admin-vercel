@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 
 import { coercePrimaryKey, pickFirstField, type Row } from "@/lib/data-helpers";
@@ -53,6 +54,12 @@ function redirectWithMessage(
   }
 
   redirect(`/?${params.toString()}`);
+}
+
+function rethrowRedirectError(error: unknown) {
+  if (isRedirectError(error)) {
+    throw error;
+  }
 }
 
 async function actorContext() {
@@ -226,6 +233,7 @@ export async function createFlavorAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Humor flavor created.", createdId);
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to create flavor."
@@ -254,6 +262,7 @@ export async function updateFlavorAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Humor flavor updated.", flavorKey);
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to update flavor.",
@@ -294,6 +303,7 @@ export async function deleteFlavorAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Humor flavor deleted.");
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to delete flavor.",
@@ -333,6 +343,7 @@ export async function createStepAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Step created.", flavorKey);
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to create step.",
@@ -362,6 +373,7 @@ export async function updateStepAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Step updated.", flavorKey);
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to update step.",
@@ -392,6 +404,7 @@ export async function deleteStepAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Step deleted.", flavorKey);
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to delete step.",
@@ -431,6 +444,7 @@ export async function moveStepAction(formData: FormData) {
     revalidatePath("/");
     redirectWithMessage("success", "Step reordered.", flavorKey);
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to reorder step.",
