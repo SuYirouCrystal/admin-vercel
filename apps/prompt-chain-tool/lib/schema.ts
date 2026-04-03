@@ -3,23 +3,6 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 type AdminClient = ReturnType<typeof createAdminSupabaseClient>;
 
-type ColumnRow = {
-  table_name: string;
-  column_name: string;
-};
-
-const TABLES = ["humor_flavors", "humor_flavor_steps", "images", "captions"] as const;
-
-function pickColumn(columns: string[], candidates: string[]): string | null {
-  for (const candidate of candidates) {
-    if (columns.includes(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
 function humanizeSlug(value: string) {
   return value
     .split(/[-_]+/)
@@ -91,114 +74,89 @@ export type CaptionView = {
 };
 
 export async function getPromptChainSchema(adminClient: AdminClient): Promise<PromptChainSchema> {
-  const { data, error } = await adminClient
-    .schema("information_schema")
-    .from("columns")
-    .select("table_name, column_name")
-    .eq("table_schema", "public")
-    .in("table_name", [...TABLES]);
+  void adminClient;
 
-  if (error) {
-    throw new Error(`Unable to inspect prompt-chain schema: ${error.message}`);
-  }
-
-  const byTable = new Map<string, string[]>();
-  for (const row of (data ?? []) as ColumnRow[]) {
-    const columns = byTable.get(row.table_name) ?? [];
-    columns.push(row.column_name);
-    byTable.set(row.table_name, columns);
-  }
-
-  const flavorColumns = byTable.get("humor_flavors") ?? [];
-  const stepColumns = byTable.get("humor_flavor_steps") ?? [];
-  const imageColumns = byTable.get("images") ?? [];
-  const captionColumns = byTable.get("captions") ?? [];
+  const flavorColumns = [
+    "id",
+    "created_datetime_utc",
+    "description",
+    "slug",
+    "created_by_user_id",
+    "modified_by_user_id",
+    "modified_datetime_utc",
+  ];
+  const stepColumns = [
+    "id",
+    "created_datetime_utc",
+    "humor_flavor_id",
+    "llm_temperature",
+    "order_by",
+    "llm_input_type_id",
+    "llm_output_type_id",
+    "llm_model_id",
+    "humor_flavor_step_type_id",
+    "llm_system_prompt",
+    "llm_user_prompt",
+    "description",
+    "created_by_user_id",
+    "modified_by_user_id",
+    "modified_datetime_utc",
+  ];
+  const imageColumns = [
+    "id",
+    "created_datetime_utc",
+    "modified_datetime_utc",
+    "url",
+    "is_common_use",
+    "profile_id",
+    "additional_context",
+    "is_public",
+    "image_description",
+    "celebrity_recognition",
+    "embedding",
+    "created_by_user_id",
+    "modified_by_user_id",
+  ];
+  const captionColumns = [
+    "id",
+    "created_datetime_utc",
+    "modified_datetime_utc",
+    "content",
+    "is_public",
+    "profile_id",
+    "image_id",
+    "humor_flavor_id",
+    "is_featured",
+    "caption_request_id",
+    "like_count",
+    "llm_prompt_chain_id",
+    "created_by_user_id",
+    "modified_by_user_id",
+  ];
 
   return {
     flavorColumns,
-    flavorIdColumn: pickColumn(flavorColumns, ["id", "humor_flavor_id"]) ?? "id",
-    flavorNameColumn: pickColumn(flavorColumns, [
-      "name",
-      "humor_flavor_name",
-      "title",
-      "label",
-      "slug",
-    ]),
-    flavorDescriptionColumn: pickColumn(flavorColumns, [
-      "description",
-      "humor_flavor_description",
-      "details",
-      "summary",
-    ]),
-    flavorOrderColumn: pickColumn(flavorColumns, [
-      "name",
-      "humor_flavor_name",
-      "slug",
-      "created_datetime_utc",
-      "created_at",
-      "modified_datetime_utc",
-      "updated_at",
-    ]),
+    flavorIdColumn: "id",
+    flavorNameColumn: "slug",
+    flavorDescriptionColumn: "description",
+    flavorOrderColumn: "slug",
     stepColumns,
-    stepIdColumn: pickColumn(stepColumns, ["id", "humor_flavor_step_id"]) ?? "id",
-    stepFlavorIdColumn: pickColumn(stepColumns, ["flavor_id", "humor_flavor_id"]),
-    stepOrderColumn: pickColumn(stepColumns, [
-      "step_order",
-      "sort_order",
-      "order_index",
-      "step_number",
-      "sequence_number",
-      "position",
-      "order_by",
-    ]),
-    stepPromptColumn: pickColumn(stepColumns, [
-      "llm_user_prompt",
-      "llm_system_prompt",
-      "description",
-      "prompt_text",
-      "step_text",
-      "prompt",
-      "text",
-      "instruction",
-      "content",
-    ]),
+    stepIdColumn: "id",
+    stepFlavorIdColumn: "humor_flavor_id",
+    stepOrderColumn: "order_by",
+    stepPromptColumn: "llm_user_prompt",
     imageColumns,
-    imageIdColumn: pickColumn(imageColumns, ["id", "image_id"]) ?? "id",
-    imageUrlColumn: pickColumn(imageColumns, ["url", "image_url", "public_url", "src"]),
-    imageDescriptionColumn: pickColumn(imageColumns, [
-      "image_description",
-      "description",
-      "alt_text",
-      "caption",
-    ]),
-    imageIsCommonUseColumn: pickColumn(imageColumns, [
-      "is_common_use",
-      "is_common",
-      "common_use",
-    ]),
-    imageOrderColumn: pickColumn(imageColumns, [
-      "created_datetime_utc",
-      "created_at",
-      "modified_datetime_utc",
-      "updated_at",
-    ]),
+    imageIdColumn: "id",
+    imageUrlColumn: "url",
+    imageDescriptionColumn: "image_description",
+    imageIsCommonUseColumn: "is_common_use",
+    imageOrderColumn: "created_datetime_utc",
     captionColumns,
-    captionIdColumn: pickColumn(captionColumns, ["id", "caption_id"]) ?? "id",
-    captionFlavorIdColumn: pickColumn(captionColumns, ["humor_flavor_id", "flavor_id"]),
-    captionContentColumn: pickColumn(captionColumns, [
-      "content",
-      "caption",
-      "text",
-      "generated_caption",
-      "candidate_caption",
-      "body",
-    ]),
-    captionImageIdColumn: pickColumn(captionColumns, ["image_id", "photo_id", "asset_id"]),
-    captionCreatedAtColumn: pickColumn(captionColumns, [
-      "created_datetime_utc",
-      "created_at",
-      "inserted_at",
-    ]),
+    captionIdColumn: "id",
+    captionFlavorIdColumn: "humor_flavor_id",
+    captionContentColumn: "content",
+    captionImageIdColumn: "image_id",
+    captionCreatedAtColumn: "created_datetime_utc",
   };
 }
 
