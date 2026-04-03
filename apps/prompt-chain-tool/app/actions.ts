@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { coercePrimaryKey, pickFirstField, type Row } from "@/lib/data-helpers";
 import { requireFlavorAdmin } from "@/lib/auth";
+import {
+  buildFlavorPayload,
+  buildStepPayload,
+  getPromptChainSchema,
+} from "@/lib/schema";
 
 function asTrimmedString(value: FormDataEntryValue | null, fieldName: string) {
   const nextValue = typeof value === "string" ? value.trim() : "";
@@ -51,10 +57,12 @@ function redirectWithMessage(
 
 async function actorContext() {
   const { adminClient, profile } = await requireFlavorAdmin();
+  const schema = await getPromptChainSchema(adminClient);
 
   return {
     adminClient,
     actorId: profile.id,
+    schema,
   };
 }
 
@@ -65,65 +73,87 @@ type StepRow = {
 
 async function listFlavorSteps(
   adminClient: Awaited<ReturnType<typeof actorContext>>["adminClient"],
+  schema: Awaited<ReturnType<typeof actorContext>>["schema"],
   flavorId: string | number
 ) {
-  const { data, error } = await adminClient
+  if (!schema.stepFlavorIdColumn) {
+    throw new Error("Could not determine the humor flavor step foreign-key column.");
+  }
+
+  let query = adminClient
     .from("humor_flavor_steps")
-    .select("id, step_order")
-    .eq("flavor_id", flavorId)
-    .order("step_order", { ascending: true });
+    .select("*")
+    .eq(schema.stepFlavorIdColumn, flavorId);
+
+  if (schema.stepOrderColumn) {
+    query = query.order(schema.stepOrderColumn, { ascending: true });
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as StepRow[];
+  return ((data ?? []) as Row[]).map((row) => ({
+    id: coercePrimaryKey(pickFirstField(row, [schema.stepIdColumn]), "Step"),
+    step_order: Number(
+      `${pickFirstField(row, [schema.stepOrderColumn, "step_order", "sort_order"]) ?? ""}`
+    ) || null,
+  })) as StepRow[];
 }
 
 async function normalizeStepOrder(
   adminClient: Awaited<ReturnType<typeof actorContext>>["adminClient"],
+  schema: Awaited<ReturnType<typeof actorContext>>["schema"],
   actorId: string,
   flavorId: string | number,
   orderedSteps?: StepRow[]
 ) {
-  const steps = orderedSteps ?? (await listFlavorSteps(adminClient, flavorId));
+  const orderColumn = schema.stepOrderColumn;
+
+  if (!orderColumn) {
+    throw new Error("Could not determine the humor flavor step order column.");
+  }
+
+  const steps = orderedSteps ?? (await listFlavorSteps(adminClient, schema, flavorId));
 
   await Promise.all(
     steps.map((step, index) =>
       adminClient
         .from("humor_flavor_steps")
         .update({
-          step_order: index + 1,
+          [orderColumn]: index + 1,
           modified_by_user_id: actorId,
         })
-        .eq("id", step.id)
+        .eq(schema.stepIdColumn, step.id)
     )
   );
 }
 
 export async function createFlavorAction(formData: FormData) {
   try {
-    const { adminClient, actorId } = await actorContext();
+    const { adminClient, actorId, schema } = await actorContext();
     const name = asTrimmedString(formData.get("name"), "Flavor name");
     const description = asOptionalString(formData.get("description"));
 
     const { data, error } = await adminClient
       .from("humor_flavors")
-      .insert({
-        name,
-        description,
-        created_by_user_id: actorId,
-        modified_by_user_id: actorId,
-      })
-      .select("id")
-      .single<{ id: string | number }>();
+      .insert(buildFlavorPayload(schema, { name, description }, actorId, "create"))
+      .select("*")
+      .single<Row>();
 
     if (error) {
       throw new Error(error.message);
     }
 
+    const createdId = coercePrimaryKey(
+      pickFirstField(data, [schema.flavorIdColumn, "id", "humor_flavor_id"]),
+      "Flavor"
+    );
+
     revalidatePath("/");
-    redirectWithMessage("success", "Humor flavor created.", data?.id);
+    redirectWithMessage("success", "Humor flavor created.", createdId);
   } catch (error) {
     redirectWithMessage(
       "error",
@@ -136,19 +166,15 @@ export async function updateFlavorAction(formData: FormData) {
   const flavorId = formData.get("flavorId");
 
   try {
-    const { adminClient, actorId } = await actorContext();
+    const { adminClient, actorId, schema } = await actorContext();
     const flavorKey = asDatabaseKey(flavorId, "Flavor");
     const name = asTrimmedString(formData.get("name"), "Flavor name");
     const description = asOptionalString(formData.get("description"));
 
     const { error } = await adminClient
       .from("humor_flavors")
-      .update({
-        name,
-        description,
-        modified_by_user_id: actorId,
-      })
-      .eq("id", flavorKey);
+      .update(buildFlavorPayload(schema, { name, description }, actorId, "update"))
+      .eq(schema.flavorIdColumn, flavorKey);
 
     if (error) {
       throw new Error(error.message);
@@ -169,13 +195,17 @@ export async function deleteFlavorAction(formData: FormData) {
   const flavorId = formData.get("flavorId");
 
   try {
-    const { adminClient } = await actorContext();
+    const { adminClient, schema } = await actorContext();
     const flavorKey = asDatabaseKey(flavorId, "Flavor");
+
+    if (!schema.stepFlavorIdColumn) {
+      throw new Error("Could not determine the humor flavor step foreign-key column.");
+    }
 
     const { error: deleteStepsError } = await adminClient
       .from("humor_flavor_steps")
       .delete()
-      .eq("flavor_id", flavorKey);
+      .eq(schema.stepFlavorIdColumn, flavorKey);
 
     if (deleteStepsError) {
       throw new Error(deleteStepsError.message);
@@ -184,7 +214,7 @@ export async function deleteFlavorAction(formData: FormData) {
     const { error } = await adminClient
       .from("humor_flavors")
       .delete()
-      .eq("id", flavorKey);
+      .eq(schema.flavorIdColumn, flavorKey);
 
     if (error) {
       throw new Error(error.message);
@@ -205,20 +235,16 @@ export async function createStepAction(formData: FormData) {
   const flavorId = formData.get("flavorId");
 
   try {
-    const { adminClient, actorId } = await actorContext();
+    const { adminClient, actorId, schema } = await actorContext();
     const flavorKey = asDatabaseKey(flavorId, "Flavor");
     const promptText = asTrimmedString(formData.get("promptText"), "Step prompt");
 
-    const existingSteps = await listFlavorSteps(adminClient, flavorKey);
+    const existingSteps = await listFlavorSteps(adminClient, schema, flavorKey);
     const nextOrder = existingSteps.length + 1;
 
-    const { error } = await adminClient.from("humor_flavor_steps").insert({
-      flavor_id: flavorKey,
-      step_order: nextOrder,
-      prompt_text: promptText,
-      created_by_user_id: actorId,
-      modified_by_user_id: actorId,
-    });
+    const { error } = await adminClient
+      .from("humor_flavor_steps")
+      .insert(buildStepPayload(schema, { flavorId: flavorKey, stepOrder: nextOrder, promptText }, actorId, "create"));
 
     if (error) {
       throw new Error(error.message);
@@ -239,18 +265,15 @@ export async function updateStepAction(formData: FormData) {
   const flavorId = formData.get("flavorId");
 
   try {
-    const { adminClient, actorId } = await actorContext();
+    const { adminClient, actorId, schema } = await actorContext();
     const stepId = asDatabaseKey(formData.get("stepId"), "Step");
     const flavorKey = asDatabaseKey(flavorId, "Flavor");
     const promptText = asTrimmedString(formData.get("promptText"), "Step prompt");
 
     const { error } = await adminClient
       .from("humor_flavor_steps")
-      .update({
-        prompt_text: promptText,
-        modified_by_user_id: actorId,
-      })
-      .eq("id", stepId);
+      .update(buildStepPayload(schema, { promptText }, actorId, "update"))
+      .eq(schema.stepIdColumn, stepId);
 
     if (error) {
       throw new Error(error.message);
@@ -271,20 +294,20 @@ export async function deleteStepAction(formData: FormData) {
   const flavorId = formData.get("flavorId");
 
   try {
-    const { adminClient, actorId } = await actorContext();
+    const { adminClient, actorId, schema } = await actorContext();
     const stepId = asDatabaseKey(formData.get("stepId"), "Step");
     const flavorKey = asDatabaseKey(flavorId, "Flavor");
 
     const { error } = await adminClient
       .from("humor_flavor_steps")
       .delete()
-      .eq("id", stepId);
+      .eq(schema.stepIdColumn, stepId);
 
     if (error) {
       throw new Error(error.message);
     }
 
-    await normalizeStepOrder(adminClient, actorId, flavorKey);
+    await normalizeStepOrder(adminClient, schema, actorId, flavorKey);
 
     revalidatePath("/");
     redirectWithMessage("success", "Step deleted.", flavorKey);
@@ -301,11 +324,11 @@ export async function moveStepAction(formData: FormData) {
   const flavorId = formData.get("flavorId");
 
   try {
-    const { adminClient, actorId } = await actorContext();
+    const { adminClient, actorId, schema } = await actorContext();
     const stepId = asDatabaseKey(formData.get("stepId"), "Step");
     const flavorKey = asDatabaseKey(flavorId, "Flavor");
     const direction = asTrimmedString(formData.get("direction"), "Direction");
-    const orderedSteps = await listFlavorSteps(adminClient, flavorKey);
+    const orderedSteps = await listFlavorSteps(adminClient, schema, flavorKey);
     const currentIndex = orderedSteps.findIndex((step) => `${step.id}` === `${stepId}`);
 
     if (currentIndex === -1) {
@@ -323,7 +346,7 @@ export async function moveStepAction(formData: FormData) {
     const [movedStep] = nextSteps.splice(currentIndex, 1);
     nextSteps.splice(swapIndex, 0, movedStep);
 
-    await normalizeStepOrder(adminClient, actorId, flavorKey, nextSteps);
+    await normalizeStepOrder(adminClient, schema, actorId, flavorKey, nextSteps);
 
     revalidatePath("/");
     redirectWithMessage("success", "Step reordered.", flavorKey);

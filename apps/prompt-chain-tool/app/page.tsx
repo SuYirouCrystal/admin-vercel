@@ -12,40 +12,21 @@ import {
   updateStepAction,
 } from "@/app/actions";
 import { profileDisplayName, requireFlavorAdmin } from "@/lib/auth";
+import {
+  fetchPromptChainRows,
+  getPromptChainSchema,
+  listRecentCaptions,
+} from "@/lib/schema";
 
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-type FlavorRow = {
-  id: string | number;
-  name: string;
-  description: string | null;
-  created_datetime_utc: string | null;
-  modified_datetime_utc: string | null;
-};
-
-type StepRow = {
-  id: string | number;
-  flavor_id: string | number | null;
-  step_order: number | null;
-  prompt_text: string;
-  modified_datetime_utc: string | null;
-};
-
 type CaptionRow = {
   id: string;
   content: string | null;
-  created_datetime_utc: string | null;
-  image_id: string | null;
-  humor_flavor_id: number | string | null;
-};
-
-type ImageRow = {
-  id: string;
-  url: string | null;
-  image_description: string | null;
-  is_common_use: boolean | null;
+  createdAt: string | null;
+  imageId: string | null;
 };
 
 function asIdString(value: string | number | null | undefined) {
@@ -91,40 +72,9 @@ export default async function HomePage({
   searchParams: SearchParams;
 }) {
   const { adminClient, profile, user } = await requireFlavorAdmin();
-
-  const [flavorsResult, stepsResult, imagesResult] = await Promise.all([
-    adminClient
-      .from("humor_flavors")
-      .select("id, name, description, created_datetime_utc, modified_datetime_utc")
-      .order("name", { ascending: true }),
-    adminClient
-      .from("humor_flavor_steps")
-      .select("id, flavor_id, step_order, prompt_text, modified_datetime_utc")
-      .limit(500)
-      .order("step_order", { ascending: true }),
-    adminClient
-      .from("images")
-      .select("id, url, image_description, is_common_use")
-      .limit(36)
-      .order("created_datetime_utc", { ascending: false }),
-  ]);
-
-  if (flavorsResult.error) {
-    throw new Error(flavorsResult.error.message);
-  }
-
-  if (stepsResult.error) {
-    throw new Error(stepsResult.error.message);
-  }
-
-  if (imagesResult.error) {
-    throw new Error(imagesResult.error.message);
-  }
-
-  const flavors = (flavorsResult.data ?? []) as FlavorRow[];
-  const steps = (stepsResult.data ?? []) as StepRow[];
-  const images = (imagesResult.data ?? []) as ImageRow[];
-  const commonUseImages = images.filter((image) => image.is_common_use);
+  const schema = await getPromptChainSchema(adminClient);
+  const { flavors, steps, images } = await fetchPromptChainRows(adminClient, schema);
+  const commonUseImages = images.filter((image) => image.isCommonUse);
   const availableImages = commonUseImages.length ? commonUseImages : images;
 
   const resolvedSearchParams = await searchParams;
@@ -135,7 +85,7 @@ export default async function HomePage({
 
   const stepCounts = new Map<string, number>();
   for (const step of steps) {
-    const key = asIdString(step.flavor_id);
+    const key = asIdString(step.flavorId);
     stepCounts.set(key, (stepCounts.get(key) ?? 0) + 1);
   }
 
@@ -143,23 +93,12 @@ export default async function HomePage({
     flavors.find((flavor) => asIdString(flavor.id) === selectedFlavorId) ?? null;
 
   const selectedSteps = steps
-    .filter((step) => asIdString(step.flavor_id) === selectedFlavorId)
-    .sort((left, right) => (left.step_order ?? 0) - (right.step_order ?? 0));
+    .filter((step) => asIdString(step.flavorId) === selectedFlavorId)
+    .sort((left, right) => (left.stepOrder ?? 0) - (right.stepOrder ?? 0));
 
   let recentCaptions: CaptionRow[] = [];
   if (selectedFlavor) {
-    const captionsResult = await adminClient
-      .from("captions")
-      .select("id, content, created_datetime_utc, image_id, humor_flavor_id")
-      .eq("humor_flavor_id", asDatabaseKey(selectedFlavor.id))
-      .limit(18)
-      .order("created_datetime_utc", { ascending: false });
-
-    if (captionsResult.error) {
-      throw new Error(captionsResult.error.message);
-    }
-
-    recentCaptions = (captionsResult.data ?? []) as CaptionRow[];
+    recentCaptions = await listRecentCaptions(adminClient, schema, asDatabaseKey(selectedFlavor.id));
   }
 
   const totalStepCount = steps.length;
@@ -415,7 +354,7 @@ export default async function HomePage({
                       >
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--accent)]">
-                            Step {step.step_order ?? index + 1}
+                            Step {step.stepOrder ?? index + 1}
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <form action={moveStepAction}>
@@ -459,7 +398,7 @@ export default async function HomePage({
                           <textarea
                             name="promptText"
                             rows={4}
-                            defaultValue={step.prompt_text}
+                            defaultValue={step.promptText}
                             className="w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-[color:var(--foreground)]"
                           />
                           <div className="flex flex-wrap gap-2">
@@ -536,14 +475,14 @@ export default async function HomePage({
             flavorName={selectedFlavor?.name ?? null}
             steps={selectedSteps.map((step) => ({
               id: asIdString(step.id),
-              step_order: step.step_order ?? 0,
-              prompt_text: step.prompt_text,
+              step_order: step.stepOrder ?? 0,
+              prompt_text: step.promptText,
             }))}
             images={availableImages.map((image) => ({
               id: image.id,
               url: image.url,
-              image_description: image.image_description,
-              is_common_use: image.is_common_use,
+              image_description: image.imageDescription,
+              is_common_use: image.isCommonUse,
             }))}
           />
 
@@ -576,7 +515,7 @@ export default async function HomePage({
                         {captionPreview(caption.content)}
                       </p>
                       <p className="mt-3 text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
-                        Image {caption.image_id ?? "unknown"} · {caption.created_datetime_utc ?? "n/a"}
+                        Image {caption.imageId ?? "unknown"} · {caption.createdAt ?? "n/a"}
                       </p>
                     </article>
                   ))
