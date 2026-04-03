@@ -26,6 +26,77 @@ const SUPPORTED_IMAGE_TYPES = new Set([
 const PIPELINE_BASE_URL =
   process.env.NEXT_PUBLIC_PIPELINE_API_BASE_URL ?? "https://api.almostcrackd.ai";
 
+function extractBalancedJson(rawText: string) {
+  const startIndex = rawText.search(/[\[{]/);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const stack: string[] = [];
+  let inString = false;
+  let isEscaped = false;
+
+  for (let index = startIndex; index < rawText.length; index += 1) {
+    const char = rawText[index];
+
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        isEscaped = true;
+        continue;
+      }
+
+      if (char === "\"") {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{" || char === "[") {
+      stack.push(char);
+      continue;
+    }
+
+    if (char === "}" || char === "]") {
+      const expected = char === "}" ? "{" : "[";
+      const last = stack.pop();
+
+      if (last !== expected) {
+        return null;
+      }
+
+      if (stack.length === 0) {
+        return rawText.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseLooseJson(rawText: string): unknown {
+  try {
+    return JSON.parse(rawText) as unknown;
+  } catch {
+    const extracted = extractBalancedJson(rawText);
+    if (!extracted) {
+      throw new Error("Response did not contain valid JSON.");
+    }
+
+    return JSON.parse(extracted) as unknown;
+  }
+}
+
 function asErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -40,7 +111,7 @@ async function parseError(response: Response): Promise<string> {
   }
 
   try {
-    const parsed = JSON.parse(rawText) as Record<string, unknown>;
+    const parsed = parseLooseJson(rawText) as Record<string, unknown>;
     const msg = parsed.message ?? parsed.error ?? parsed.details;
     if (typeof msg === "string" && msg.trim()) {
       return msg;
@@ -107,7 +178,7 @@ export default function PipelineWorkbench() {
       throw new Error(await parseError(response));
     }
 
-    return (await response.json()) as unknown;
+    return parseLooseJson(await response.text());
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
