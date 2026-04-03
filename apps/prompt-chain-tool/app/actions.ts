@@ -131,6 +131,77 @@ async function normalizeStepOrder(
   );
 }
 
+async function buildCreateStepInsertPayload(
+  adminClient: Awaited<ReturnType<typeof actorContext>>["adminClient"],
+  schema: Awaited<ReturnType<typeof actorContext>>["schema"],
+  actorId: string,
+  flavorId: string | number,
+  stepOrder: number,
+  promptText: string
+) {
+  const basePayload = buildStepPayload(
+    schema,
+    { flavorId, stepOrder, promptText },
+    actorId,
+    "create"
+  );
+
+  const excludedColumns = new Set([
+    schema.stepIdColumn,
+    "id",
+    "created_datetime_utc",
+    "modified_datetime_utc",
+    "created_at",
+    "updated_at",
+    "created_by_user_id",
+    "modified_by_user_id",
+    schema.stepFlavorIdColumn,
+    schema.stepOrderColumn,
+    schema.stepPromptColumn,
+  ]);
+
+  let templateQuery = adminClient.from("humor_flavor_steps").select("*").limit(1);
+
+  if (schema.stepFlavorIdColumn) {
+    templateQuery = templateQuery.eq(schema.stepFlavorIdColumn, flavorId);
+  }
+
+  if (schema.stepOrderColumn) {
+    templateQuery = templateQuery.order(schema.stepOrderColumn, { ascending: true });
+  }
+
+  let { data: templateData } = await templateQuery;
+
+  if (!templateData?.length) {
+    const fallbackQuery = schema.stepOrderColumn
+      ? adminClient.from("humor_flavor_steps").select("*").limit(1).order(schema.stepOrderColumn, { ascending: true })
+      : adminClient.from("humor_flavor_steps").select("*").limit(1);
+
+    const fallback = await fallbackQuery;
+    templateData = fallback.data ?? null;
+  }
+
+  const template = Array.isArray(templateData) && templateData[0] && typeof templateData[0] === "object"
+    ? (templateData[0] as Row)
+    : null;
+
+  if (!template) {
+    return basePayload;
+  }
+
+  const clonedDefaults: Row = {};
+  for (const column of schema.stepColumns) {
+    if (!excludedColumns.has(column) && column in template) {
+      clonedDefaults[column] = template[column];
+    }
+  }
+
+  return {
+    ...clonedDefaults,
+    ...basePayload,
+  };
+}
+
 export async function createFlavorAction(formData: FormData) {
   try {
     const { adminClient, actorId, schema } = await actorContext();
@@ -242,9 +313,18 @@ export async function createStepAction(formData: FormData) {
     const existingSteps = await listFlavorSteps(adminClient, schema, flavorKey);
     const nextOrder = existingSteps.length + 1;
 
+    const insertPayload = await buildCreateStepInsertPayload(
+      adminClient,
+      schema,
+      actorId,
+      flavorKey,
+      nextOrder,
+      promptText
+    );
+
     const { error } = await adminClient
       .from("humor_flavor_steps")
-      .insert(buildStepPayload(schema, { flavorId: flavorKey, stepOrder: nextOrder, promptText }, actorId, "create"));
+      .insert(insertPayload);
 
     if (error) {
       throw new Error(error.message);

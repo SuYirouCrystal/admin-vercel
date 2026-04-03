@@ -20,6 +20,22 @@ function pickColumn(columns: string[], candidates: string[]): string | null {
   return null;
 }
 
+function humanizeSlug(value: string) {
+  return value
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export type PromptChainSchema = {
   flavorColumns: string[];
   flavorIdColumn: string;
@@ -101,7 +117,13 @@ export async function getPromptChainSchema(adminClient: AdminClient): Promise<Pr
   return {
     flavorColumns,
     flavorIdColumn: pickColumn(flavorColumns, ["id", "humor_flavor_id"]) ?? "id",
-    flavorNameColumn: pickColumn(flavorColumns, ["name", "humor_flavor_name", "title", "label"]),
+    flavorNameColumn: pickColumn(flavorColumns, [
+      "name",
+      "humor_flavor_name",
+      "title",
+      "label",
+      "slug",
+    ]),
     flavorDescriptionColumn: pickColumn(flavorColumns, [
       "description",
       "humor_flavor_description",
@@ -111,6 +133,7 @@ export async function getPromptChainSchema(adminClient: AdminClient): Promise<Pr
     flavorOrderColumn: pickColumn(flavorColumns, [
       "name",
       "humor_flavor_name",
+      "slug",
       "created_datetime_utc",
       "created_at",
       "modified_datetime_utc",
@@ -126,8 +149,12 @@ export async function getPromptChainSchema(adminClient: AdminClient): Promise<Pr
       "step_number",
       "sequence_number",
       "position",
+      "order_by",
     ]),
     stepPromptColumn: pickColumn(stepColumns, [
+      "llm_user_prompt",
+      "llm_system_prompt",
+      "description",
       "prompt_text",
       "step_text",
       "prompt",
@@ -198,7 +225,8 @@ export function buildFlavorPayload(
   }
 
   const payload: Row = {
-    [schema.flavorNameColumn]: values.name,
+    [schema.flavorNameColumn]:
+      schema.flavorNameColumn === "slug" ? slugify(values.name) || "untitled-flavor" : values.name,
   };
 
   if (schema.flavorDescriptionColumn) {
@@ -249,7 +277,7 @@ export function flavorViewModel(row: Row, schema: PromptChainSchema): FlavorView
 
   return {
     id,
-    name,
+    name: schema.flavorNameColumn === "slug" ? humanizeSlug(name) : name,
     description,
     raw: row,
   };
