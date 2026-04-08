@@ -1,4 +1,10 @@
-import { formatValue, pickFirstField, toRowArray, valueAsString } from "@/lib/data-helpers";
+import {
+  formatValue,
+  pickCreatedAt,
+  pickFirstField,
+  toRowArray,
+  valueAsString,
+} from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +24,15 @@ function displayName(profile: Record<string, unknown>): string {
 export default async function ProfilesPage() {
   const { adminClient } = await requireSuperadmin();
 
-  const { data } = await adminClient
+  const { data, error } = await adminClient
     .from("profiles")
     .select("*")
     .limit(250)
-    .order("created_at", { ascending: false });
+    .order("created_datetime_utc", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 
   const profiles = toRowArray(data);
 
@@ -55,7 +65,9 @@ export default async function ProfilesPage() {
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-slate-500">Created</dt>
-                  <dd className="text-right text-slate-700">{formatValue(profile.created_at)}</dd>
+                  <dd className="text-right text-slate-700">
+                    {formatValue(pickCreatedAt(profile))}
+                  </dd>
                 </div>
               </dl>
 

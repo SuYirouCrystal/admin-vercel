@@ -1,5 +1,6 @@
 import {
   formatValue,
+  pickCreatedAt,
   pickFirstField,
   toRowArray,
   valueAsString,
@@ -19,9 +20,11 @@ export const dynamic = "force-dynamic";
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const defaultCreatePayload = `{
-  "user_id": "<profile-id>",
-  "image_url": "https://example.com/image.jpg",
-  "title": "Sunset boardwalk"
+  "profile_id": "<profile-id>",
+  "url": "https://example.com/image.jpg",
+  "is_common_use": false,
+  "is_public": false,
+  "image_description": "Sunset boardwalk"
 }`;
 
 function recordId(image: Row): string {
@@ -59,11 +62,15 @@ export default async function ImagesPage({
   searchParams: SearchParams;
 }) {
   const { adminClient } = await requireSuperadmin();
-  const { data } = await adminClient
+  const { data, error: fetchError } = await adminClient
     .from("images")
     .select("*")
     .limit(250)
-    .order("created_at", { ascending: false });
+    .order("created_datetime_utc", { ascending: false });
+
+  if (fetchError) {
+    throw new Error(fetchError.message);
+  }
 
   const images = toRowArray(data);
   const resolvedSearchParams = await searchParams;
@@ -128,7 +135,9 @@ export default async function ImagesPage({
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900">{displayTitle(image)}</h3>
                     <p className="mt-1 text-sm text-slate-600">ID: {formatValue(image.id)}</p>
-                    <p className="text-sm text-slate-600">Created: {formatValue(image.created_at)}</p>
+                    <p className="text-sm text-slate-600">
+                      Created: {formatValue(pickCreatedAt(image))}
+                    </p>
                   </div>
                   {url.startsWith("http") ? (
                     // eslint-disable-next-line @next/next/no-img-element

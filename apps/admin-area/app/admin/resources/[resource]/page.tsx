@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import {
   formatValue,
+  pickCreatedAt,
   toRowArray,
   type Row,
 } from "@/lib/data-helpers";
@@ -61,7 +62,15 @@ function buildDefaultCreatePayload(firstRow: Row | null): string {
 
   const clone: Row = {};
   for (const [key, value] of Object.entries(firstRow)) {
-    if (["id", "created_at", "updated_at"].includes(key)) {
+    if (
+      [
+        "id",
+        "created_at",
+        "updated_at",
+        "created_datetime_utc",
+        "modified_datetime_utc",
+      ].includes(key)
+    ) {
       continue;
     }
 
@@ -115,7 +124,7 @@ async function fetchRows(
     .from(table)
     .select("*")
     .limit(250)
-    .order("created_at", { ascending: false });
+    .order("created_datetime_utc", { ascending: false });
 
   if (!ordered.error) {
     return toRowArray(ordered.data);
@@ -213,7 +222,7 @@ export default async function ResourceManagementPage({
                     {primaryKey ? `${primaryKey.column}: ${primaryKey.value}` : "No primary key detected"}
                   </span>
                   <span className="rounded-full bg-slate-100 px-2 py-1">
-                    created_at: {formatValue(row.created_at)}
+                    created: {formatValue(pickCreatedAt(row))}
                   </span>
                 </div>
 

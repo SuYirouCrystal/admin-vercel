@@ -19,6 +19,17 @@ export function pickFirstField(row: Row, keys: string[]): unknown {
   return undefined;
 }
 
+export function pickCreatedAt(row: Row): unknown {
+  return pickFirstField(row, [
+    "created_datetime_utc",
+    "created_at",
+    "inserted_at",
+    "created",
+    "modified_datetime_utc",
+    "updated_at",
+  ]);
+}
+
 export function valueAsString(value: unknown): string {
   if (typeof value === "string") {
     return value;

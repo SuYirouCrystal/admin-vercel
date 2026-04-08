@@ -2,6 +2,7 @@ import { format } from "date-fns";
 
 import {
   formatValue,
+  pickCreatedAt,
   pickFirstField,
   toRowArray,
   valueAsString,
@@ -32,7 +33,7 @@ function rowImageId(row: Row): string {
 }
 
 function rowCreatedAt(row: Row): string {
-  return valueAsString(pickFirstField(row, ["created_at", "inserted_at", "updated_at"]));
+  return valueAsString(pickCreatedAt(row));
 }
 
 function displayProfileName(profile: Row): string {

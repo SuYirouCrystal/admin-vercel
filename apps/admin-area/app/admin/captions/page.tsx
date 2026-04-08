@@ -1,4 +1,10 @@
-import { formatValue, pickFirstField, toRowArray, valueAsString } from "@/lib/data-helpers";
+import {
+  formatValue,
+  pickCreatedAt,
+  pickFirstField,
+  toRowArray,
+  valueAsString,
+} from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +20,15 @@ function captionText(caption: Record<string, unknown>): string {
 export default async function CaptionsPage() {
   const { adminClient } = await requireSuperadmin();
 
-  const { data } = await adminClient
+  const { data, error } = await adminClient
     .from("captions")
     .select("*")
     .limit(250)
-    .order("created_at", { ascending: false });
+    .order("created_datetime_utc", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 
   const captions = toRowArray(data);
 
@@ -57,7 +67,7 @@ export default async function CaptionsPage() {
                 </div>
                 <div className="rounded-lg bg-slate-50 p-2">
                   <dt className="text-xs text-slate-500 uppercase">Created</dt>
-                  <dd className="text-xs text-slate-800">{formatValue(caption.created_at)}</dd>
+                  <dd className="text-xs text-slate-800">{formatValue(pickCreatedAt(caption))}</dd>
                 </div>
               </dl>
 
