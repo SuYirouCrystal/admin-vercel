@@ -1,10 +1,30 @@
-# Caption App: Supabase + Pipeline
+# Caption App: Supabase + Pipeline + Ranking UX
 
 This app now supports both:
 
 - Supabase read list page (`/list`) from pre-existing `dorms` table.
 - Image upload + caption generation pipeline on `/`.
 - Caption creation and caption voting with Google-authenticated writes on `/`.
+- A single-page ranking workflow on `/` where users can pick recent captions directly instead of
+  manually typing caption IDs.
+
+## Feedback-driven improvements
+
+Recent user testing highlighted four recurring issues:
+
+1. users were not sure what to do first
+2. the token requirement felt too technical
+3. the status feedback during pipeline execution was weak
+4. ranking captions by copying IDs was slow and confusing
+
+The current homepage addresses those points by:
+
+- adding a visible quick-start walkthrough before the pipeline form
+- keeping the token/file prerequisites visible near the form inputs
+- showing a clearer runtime status tracker during the 4-step pipeline
+- surfacing caption creation and rating on the same page
+- letting users select a recent caption for rating directly from the list
+- making raw JSON a secondary, advanced detail instead of the main result
 
 ## Pipeline flow implemented
 
