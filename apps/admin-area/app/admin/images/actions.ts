@@ -11,13 +11,22 @@ import {
   type Row,
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
+import { mergeMessageIntoPath, stripQuery } from "@/lib/pagination";
 
-function redirectWithMessage(type: "error" | "success", message: string): never {
-  const params = new URLSearchParams({
-    [type]: message.slice(0, 220),
-  });
+function safeReturnTo(rawPath: unknown): string {
+  const value = valueAsString(rawPath).trim();
+  if (value.startsWith("/admin/images")) {
+    return value;
+  }
+  return "/admin/images";
+}
 
-  redirect(`/admin/images?${params.toString()}`);
+function redirectWithMessage(
+  returnTo: string,
+  type: "error" | "success",
+  message: string
+): never {
+  redirect(mergeMessageIntoPath(returnTo, type, message));
 }
 
 async function getAdminContext() {
@@ -34,6 +43,8 @@ function removeId(payload: Row) {
 }
 
 export async function createImageAction(formData: FormData) {
+  const returnTo = safeReturnTo(formData.get("returnTo"));
+
   try {
     const payload = parseObjectPayload(formData.get("payload"));
     removeId(payload);
@@ -53,14 +64,16 @@ export async function createImageAction(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath("/admin/images");
-    redirectWithMessage("success", "Image record created.");
+    revalidatePath(stripQuery(returnTo));
+    redirectWithMessage(returnTo, "success", "Image record created.");
   } catch (error) {
-    redirectWithMessage("error", getErrorMessage(error));
+    redirectWithMessage(returnTo, "error", getErrorMessage(error));
   }
 }
 
 export async function updateImageAction(formData: FormData) {
+  const returnTo = safeReturnTo(formData.get("returnTo"));
+
   try {
     const id = coercePrimaryKey(formData.get("id"));
     const payload = parseObjectPayload(formData.get("payload"));
@@ -83,14 +96,16 @@ export async function updateImageAction(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath("/admin/images");
-    redirectWithMessage("success", "Image record updated.");
+    revalidatePath(stripQuery(returnTo));
+    redirectWithMessage(returnTo, "success", "Image record updated.");
   } catch (error) {
-    redirectWithMessage("error", getErrorMessage(error));
+    redirectWithMessage(returnTo, "error", getErrorMessage(error));
   }
 }
 
 export async function deleteImageAction(formData: FormData) {
+  const returnTo = safeReturnTo(formData.get("returnTo"));
+
   try {
     const id = coercePrimaryKey(formData.get("id"));
 
@@ -101,9 +116,9 @@ export async function deleteImageAction(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath("/admin/images");
-    redirectWithMessage("success", "Image record deleted.");
+    revalidatePath(stripQuery(returnTo));
+    redirectWithMessage(returnTo, "success", "Image record deleted.");
   } catch (error) {
-    redirectWithMessage("error", getErrorMessage(error));
+    redirectWithMessage(returnTo, "error", getErrorMessage(error));
   }
 }

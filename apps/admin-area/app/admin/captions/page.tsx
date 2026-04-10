@@ -1,3 +1,6 @@
+import { redirect } from "next/navigation";
+
+import PaginationControls from "@/components/pagination-controls";
 import {
   formatValue,
   pickCreatedAt,
@@ -6,8 +9,13 @@ import {
   valueAsString,
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
+import { buildPageHref, getRangeForPage, parsePageParam, type SearchParamRecord } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 40;
+
+type SearchParams = Promise<SearchParamRecord>;
 
 function captionText(caption: Record<string, unknown>): string {
   return (
@@ -17,27 +25,51 @@ function captionText(caption: Record<string, unknown>): string {
   );
 }
 
-export default async function CaptionsPage() {
+export default async function CaptionsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const { adminClient } = await requireSuperadmin();
+  const resolvedSearchParams = await searchParams;
+  const currentPage = parsePageParam(resolvedSearchParams.page);
+  const { from, to } = getRangeForPage(currentPage, PAGE_SIZE);
 
-  const { data, error } = await adminClient
+  const { data, count, error } = await adminClient
     .from("captions")
-    .select("*")
-    .limit(250)
-    .order("created_datetime_utc", { ascending: false });
+    .select("*", { count: "exact" })
+    .order("created_datetime_utc", { ascending: false })
+    .range(from, to);
 
   if (error) {
     throw new Error(error.message);
   }
 
   const captions = toRowArray(data);
+  const totalItems = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  if (totalItems > 0 && currentPage > totalPages) {
+    redirect(buildPageHref("/admin/captions", resolvedSearchParams, totalPages));
+  }
 
   return (
     <main className="space-y-6 pb-10">
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900">Captions (read only)</h2>
-        <p className="mt-2 text-sm text-slate-600">{captions.length} recent caption records.</p>
+        <p className="mt-2 text-sm text-slate-600">
+          Browse recent caption records with real pagination instead of a fixed cutoff.
+        </p>
       </header>
+
+      <PaginationControls
+        basePath="/admin/captions"
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="captions"
+      />
 
       <section className="space-y-4">
         {captions.length ? (
@@ -85,6 +117,15 @@ export default async function CaptionsPage() {
           <p className="text-sm text-slate-600">No captions found.</p>
         )}
       </section>
+
+      <PaginationControls
+        basePath="/admin/captions"
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="captions"
+      />
     </main>
   );
 }

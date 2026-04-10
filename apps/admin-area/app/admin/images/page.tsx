@@ -1,3 +1,6 @@
+import { redirect } from "next/navigation";
+
+import PaginationControls from "@/components/pagination-controls";
 import {
   formatValue,
   pickCreatedAt,
@@ -8,6 +11,12 @@ import {
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
 import ImageUploadPanel from "@/components/image-upload-panel";
+import {
+  buildPageHref,
+  getRangeForPage,
+  parsePageParam,
+  type SearchParamRecord,
+} from "@/lib/pagination";
 
 import {
   createImageAction,
@@ -17,7 +26,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+type SearchParams = Promise<SearchParamRecord>;
+
+const PAGE_SIZE = 24;
 
 const defaultCreatePayload = `{
   "profile_id": "<profile-id>",
@@ -62,27 +73,37 @@ export default async function ImagesPage({
   searchParams: SearchParams;
 }) {
   const { adminClient } = await requireSuperadmin();
-  const { data, error: fetchError } = await adminClient
+  const resolvedSearchParams = await searchParams;
+  const currentPage = parsePageParam(resolvedSearchParams.page);
+  const { from, to } = getRangeForPage(currentPage, PAGE_SIZE);
+
+  const { data, count, error: fetchError } = await adminClient
     .from("images")
-    .select("*")
-    .limit(250)
-    .order("created_datetime_utc", { ascending: false });
+    .select("*", { count: "exact" })
+    .order("created_datetime_utc", { ascending: false })
+    .range(from, to);
 
   if (fetchError) {
     throw new Error(fetchError.message);
   }
 
   const images = toRowArray(data);
-  const resolvedSearchParams = await searchParams;
+  const totalItems = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const success = queryValue(resolvedSearchParams, "success");
   const error = queryValue(resolvedSearchParams, "error");
+  const currentPath = buildPageHref("/admin/images", resolvedSearchParams, currentPage);
+
+  if (totalItems > 0 && currentPage > totalPages) {
+    redirect(buildPageHref("/admin/images", resolvedSearchParams, totalPages));
+  }
 
   return (
     <main className="space-y-6 pb-10">
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900">Images (create, update, delete)</h2>
         <p className="mt-2 text-sm text-slate-600">
-          JSON-powered editor to support custom image schemas without touching RLS policies.
+          JSON-powered editor with real pagination so large image libraries are actually navigable.
         </p>
       </header>
 
@@ -100,12 +121,22 @@ export default async function ImagesPage({
 
       <ImageUploadPanel />
 
+      <PaginationControls
+        basePath="/admin/images"
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="images"
+      />
+
       <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm">
         <h3 className="text-lg font-semibold text-teal-900">Create image record</h3>
         <p className="mt-2 text-sm text-teal-700">
           Provide a valid JSON object that matches your `images` table columns.
         </p>
         <form action={createImageAction} className="mt-4 space-y-3">
+          <input type="hidden" name="returnTo" value={currentPath} />
           <textarea
             name="payload"
             defaultValue={defaultCreatePayload}
@@ -151,6 +182,7 @@ export default async function ImagesPage({
 
                 <form action={updateImageAction} className="mt-4 space-y-3">
                   <input type="hidden" name="id" value={id} />
+                  <input type="hidden" name="returnTo" value={currentPath} />
                   <textarea
                     name="payload"
                     defaultValue={rawJson}
@@ -171,6 +203,7 @@ export default async function ImagesPage({
 
                 <form action={deleteImageAction} className="mt-3">
                   <input type="hidden" name="id" value={id} />
+                  <input type="hidden" name="returnTo" value={currentPath} />
                   <button
                     type="submit"
                     className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
@@ -185,6 +218,15 @@ export default async function ImagesPage({
           <p className="text-sm text-slate-600">No images found.</p>
         )}
       </section>
+
+      <PaginationControls
+        basePath="/admin/images"
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="images"
+      />
     </main>
   );
 }

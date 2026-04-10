@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
+import PaginationControls from "@/components/pagination-controls";
 import {
   formatValue,
   pickCreatedAt,
@@ -8,6 +9,12 @@ import {
 } from "@/lib/data-helpers";
 import { getAdminResource } from "@/lib/admin-resources";
 import { requireSuperadmin } from "@/lib/auth";
+import {
+  buildPageHref,
+  getRangeForPage,
+  parsePageParam,
+  type SearchParamRecord,
+} from "@/lib/pagination";
 
 import {
   createResourceRecordAction,
@@ -18,7 +25,7 @@ import {
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ resource: string }>;
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+type SearchParams = Promise<SearchParamRecord>;
 
 type PrimaryKey = {
   column: string;
@@ -36,6 +43,8 @@ const PRIMARY_KEY_CANDIDATES = [
   "term",
   "code",
 ];
+
+const PAGE_SIZE = 40;
 
 function findPrimaryKey(row: Row): PrimaryKey | null {
   for (const column of PRIMARY_KEY_CANDIDATES) {
@@ -118,24 +127,37 @@ function queryMessage(
 
 async function fetchRows(
   adminClient: Awaited<ReturnType<typeof requireSuperadmin>>["adminClient"],
-  table: string
+  table: string,
+  page: number,
+  pageSize: number
 ) {
+  const { from, to } = getRangeForPage(page, pageSize);
+
   const ordered = await adminClient
     .from(table)
-    .select("*")
-    .limit(250)
-    .order("created_datetime_utc", { ascending: false });
+    .select("*", { count: "exact" })
+    .order("created_datetime_utc", { ascending: false })
+    .range(from, to);
 
   if (!ordered.error) {
-    return toRowArray(ordered.data);
+    return {
+      rows: toRowArray(ordered.data),
+      totalItems: ordered.count ?? 0,
+    };
   }
 
-  const fallback = await adminClient.from(table).select("*").limit(250);
+  const fallback = await adminClient
+    .from(table)
+    .select("*", { count: "exact" })
+    .range(from, to);
   if (fallback.error) {
     throw new Error(fallback.error.message);
   }
 
-  return toRowArray(fallback.data);
+  return {
+    rows: toRowArray(fallback.data),
+    totalItems: fallback.count ?? 0,
+  };
 }
 
 export default async function ResourceManagementPage({
@@ -153,13 +175,24 @@ export default async function ResourceManagementPage({
   }
 
   const { adminClient } = await requireSuperadmin();
-  const rows = await fetchRows(adminClient, resource.table);
-
   const resolvedSearchParams = await searchParams;
+  const currentPage = parsePageParam(resolvedSearchParams.page);
+  const { rows, totalItems } = await fetchRows(
+    adminClient,
+    resource.table,
+    currentPage,
+    PAGE_SIZE
+  );
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const success = queryMessage(resolvedSearchParams, "success");
   const error = queryMessage(resolvedSearchParams, "error");
   const path = `/admin/resources/${resource.slug}`;
+  const currentPath = buildPageHref(path, resolvedSearchParams, currentPage);
   const createPayload = buildDefaultCreatePayload(rows[0] ?? null);
+
+  if (totalItems > 0 && currentPage > totalPages) {
+    redirect(buildPageHref(path, resolvedSearchParams, totalPages));
+  }
 
   return (
     <main className="space-y-6 pb-10">
@@ -188,7 +221,7 @@ export default async function ResourceManagementPage({
           <h3 className="text-lg font-semibold text-teal-900">Create record</h3>
           <form action={createResourceRecordAction} className="mt-4 space-y-3">
             <input type="hidden" name="table" value={resource.table} />
-            <input type="hidden" name="path" value={path} />
+            <input type="hidden" name="path" value={currentPath} />
             <textarea
               name="payload"
               defaultValue={createPayload}
@@ -205,6 +238,15 @@ export default async function ResourceManagementPage({
           </form>
         </section>
       ) : null}
+
+      <PaginationControls
+        basePath={path}
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="records"
+      />
 
       <section className="space-y-4">
         {rows.length ? (
@@ -233,7 +275,7 @@ export default async function ResourceManagementPage({
                 ) : (
                   <form action={updateResourceRecordAction} className="space-y-3">
                     <input type="hidden" name="table" value={resource.table} />
-                    <input type="hidden" name="path" value={path} />
+                    <input type="hidden" name="path" value={currentPath} />
                     <input type="hidden" name="pkColumn" value={primaryKey?.column ?? ""} />
                     <input type="hidden" name="pkValue" value={primaryKey?.value ?? ""} />
                     <textarea
@@ -259,7 +301,7 @@ export default async function ResourceManagementPage({
                 {resource.mode === "crud" ? (
                   <form action={deleteResourceRecordAction} className="mt-3">
                     <input type="hidden" name="table" value={resource.table} />
-                    <input type="hidden" name="path" value={path} />
+                    <input type="hidden" name="path" value={currentPath} />
                     <input type="hidden" name="pkColumn" value={primaryKey?.column ?? ""} />
                     <input type="hidden" name="pkValue" value={primaryKey?.value ?? ""} />
                     <button
@@ -278,6 +320,15 @@ export default async function ResourceManagementPage({
           <p className="text-sm text-slate-600">No records found.</p>
         )}
       </section>
+
+      <PaginationControls
+        basePath={path}
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="records"
+      />
     </main>
   );
 }

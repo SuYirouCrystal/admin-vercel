@@ -1,3 +1,6 @@
+import { redirect } from "next/navigation";
+
+import PaginationControls from "@/components/pagination-controls";
 import {
   formatValue,
   pickCreatedAt,
@@ -6,8 +9,13 @@ import {
   valueAsString,
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
+import { buildPageHref, getRangeForPage, parsePageParam, type SearchParamRecord } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 24;
+
+type SearchParams = Promise<SearchParamRecord>;
 
 function displayName(profile: Record<string, unknown>): string {
   const name = valueAsString(
@@ -21,29 +29,51 @@ function displayName(profile: Record<string, unknown>): string {
   return valueAsString(profile.id) || "Unknown profile";
 }
 
-export default async function ProfilesPage() {
+export default async function ProfilesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const { adminClient } = await requireSuperadmin();
+  const resolvedSearchParams = await searchParams;
+  const currentPage = parsePageParam(resolvedSearchParams.page);
+  const { from, to } = getRangeForPage(currentPage, PAGE_SIZE);
 
-  const { data, error } = await adminClient
+  const { data, count, error } = await adminClient
     .from("profiles")
-    .select("*")
-    .limit(250)
-    .order("created_datetime_utc", { ascending: false });
+    .select("*", { count: "exact" })
+    .order("created_datetime_utc", { ascending: false })
+    .range(from, to);
 
   if (error) {
     throw new Error(error.message);
   }
 
   const profiles = toRowArray(data);
+  const totalItems = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  if (totalItems > 0 && currentPage > totalPages) {
+    redirect(buildPageHref("/admin/profiles", resolvedSearchParams, totalPages));
+  }
 
   return (
     <main className="space-y-6 pb-10">
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900">Users and profiles (read only)</h2>
         <p className="mt-2 text-sm text-slate-600">
-          {profiles.length} most recent profiles. Management here is intentionally read-only.
+          Read-only profile browsing with page controls instead of a fixed recent-only slice.
         </p>
       </header>
+
+      <PaginationControls
+        basePath="/admin/profiles"
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="profiles"
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {profiles.length ? (
@@ -85,6 +115,15 @@ export default async function ProfilesPage() {
           <p className="text-sm text-slate-600">No profiles found.</p>
         )}
       </section>
+
+      <PaginationControls
+        basePath="/admin/profiles"
+        searchParams={resolvedSearchParams}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        totalItems={totalItems}
+        itemLabel="profiles"
+      />
     </main>
   );
 }

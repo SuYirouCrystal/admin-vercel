@@ -12,6 +12,7 @@ import {
 } from "@/lib/data-helpers";
 import { requireSuperadmin } from "@/lib/auth";
 import { ALLOWED_RESOURCE_TABLES } from "@/lib/admin-resources";
+import { mergeMessageIntoPath, stripQuery } from "@/lib/pagination";
 
 function safePath(rawPath: unknown): string {
   const value = valueAsString(rawPath).trim();
@@ -30,11 +31,7 @@ function safeTable(rawTable: unknown): string {
 }
 
 function redirectWithMessage(path: string, type: "error" | "success", message: string): never {
-  const params = new URLSearchParams({
-    [type]: message.slice(0, 220),
-  });
-
-  redirect(`${path}?${params.toString()}`);
+  redirect(mergeMessageIntoPath(path, type, message));
 }
 
 function removePrimaryKey(payload: Row, primaryKeyColumn: string) {
@@ -74,7 +71,7 @@ export async function createResourceRecordAction(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath(path);
+    revalidatePath(stripQuery(path));
     redirectWithMessage(path, "success", "Record created.");
   } catch (error) {
     redirectWithMessage(path, "error", getErrorMessage(error));
@@ -114,7 +111,7 @@ export async function updateResourceRecordAction(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath(path);
+    revalidatePath(stripQuery(path));
     redirectWithMessage(path, "success", "Record updated.");
   } catch (error) {
     redirectWithMessage(path, "error", getErrorMessage(error));
@@ -143,7 +140,7 @@ export async function deleteResourceRecordAction(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath(path);
+    revalidatePath(stripQuery(path));
     redirectWithMessage(path, "success", "Record deleted.");
   } catch (error) {
     redirectWithMessage(path, "error", getErrorMessage(error));
