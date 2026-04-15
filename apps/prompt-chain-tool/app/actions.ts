@@ -4,11 +4,18 @@ import { revalidatePath } from "next/cache";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 
-import { coercePrimaryKey, pickFirstField, type Row } from "@/lib/data-helpers";
+import {
+  coercePrimaryKey,
+  pickFirstField,
+  toRowArray,
+  valueAsString,
+  type Row,
+} from "@/lib/data-helpers";
 import { requireFlavorAdmin } from "@/lib/auth";
 import {
   buildFlavorPayload,
   buildStepPayload,
+  flavorViewModel,
   getPromptChainSchema,
 } from "@/lib/schema";
 
@@ -38,6 +45,14 @@ function asDatabaseKey(value: FormDataEntryValue | null, fieldName: string) {
   }
 
   return rawValue;
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function redirectWithMessage(
@@ -71,6 +86,49 @@ async function actorContext() {
     actorId: profile.id,
     schema,
   };
+}
+
+function flavorNameKey(
+  schema: Awaited<ReturnType<typeof actorContext>>["schema"],
+  name: string
+) {
+  return schema.flavorNameColumn === "slug" ? slugify(name) : name.trim().toLowerCase();
+}
+
+async function buildUniqueFlavorName(
+  adminClient: Awaited<ReturnType<typeof actorContext>>["adminClient"],
+  schema: Awaited<ReturnType<typeof actorContext>>["schema"],
+  baseName: string
+) {
+  const lookupColumn = schema.flavorNameColumn ?? schema.flavorIdColumn;
+  const { data, error } = await adminClient.from("humor_flavors").select(lookupColumn);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const existingNames = new Set(
+    toRowArray(data)
+      .map((row) => valueAsString(pickFirstField(row, [lookupColumn, "name", "slug"])).trim())
+      .filter(Boolean)
+      .map((name) =>
+        schema.flavorNameColumn === "slug" ? name.toLowerCase() : name.toLowerCase()
+      )
+  );
+
+  let attempt = 1;
+  while (attempt < 10_000) {
+    const candidate = attempt === 1 ? `${baseName} Copy` : `${baseName} Copy ${attempt}`;
+    const key = flavorNameKey(schema, candidate);
+
+    if (!existingNames.has(key)) {
+      return candidate;
+    }
+
+    attempt += 1;
+  }
+
+  throw new Error("Unable to generate a unique duplicate flavor name.");
 }
 
 type StepRow = {
@@ -209,6 +267,56 @@ async function buildCreateStepInsertPayload(
   };
 }
 
+function cloneStepPayload(
+  step: Row,
+  schema: Awaited<ReturnType<typeof actorContext>>["schema"],
+  actorId: string,
+  flavorId: string | number,
+  stepOrder: number
+) {
+  const payload: Row = {};
+  const excludedColumns = new Set([
+    schema.stepIdColumn,
+    "id",
+    "created_datetime_utc",
+    "modified_datetime_utc",
+    "created_at",
+    "updated_at",
+    "created_by_user_id",
+    "modified_by_user_id",
+  ]);
+
+  for (const column of schema.stepColumns) {
+    if (excludedColumns.has(column)) {
+      continue;
+    }
+
+    if (column === schema.stepFlavorIdColumn) {
+      payload[column] = flavorId;
+      continue;
+    }
+
+    if (column === schema.stepOrderColumn) {
+      payload[column] = stepOrder;
+      continue;
+    }
+
+    if (column in step) {
+      payload[column] = step[column];
+    }
+  }
+
+  if (schema.stepColumns.includes("created_by_user_id")) {
+    payload.created_by_user_id = actorId;
+  }
+
+  if (schema.stepColumns.includes("modified_by_user_id")) {
+    payload.modified_by_user_id = actorId;
+  }
+
+  return payload;
+}
+
 export async function createFlavorAction(formData: FormData) {
   try {
     const { adminClient, actorId, schema } = await actorContext();
@@ -307,6 +415,95 @@ export async function deleteFlavorAction(formData: FormData) {
     redirectWithMessage(
       "error",
       error instanceof Error ? error.message : "Unable to delete flavor.",
+      typeof flavorId === "string" ? flavorId : null
+    );
+  }
+}
+
+export async function duplicateFlavorAction(formData: FormData) {
+  const flavorId = formData.get("flavorId");
+
+  try {
+    const { adminClient, actorId, schema } = await actorContext();
+    const flavorKey = asDatabaseKey(flavorId, "Flavor");
+
+    if (!schema.stepFlavorIdColumn) {
+      throw new Error("Could not determine the humor flavor step foreign-key column.");
+    }
+
+    const { data: sourceFlavor, error: sourceFlavorError } = await adminClient
+      .from("humor_flavors")
+      .select("*")
+      .eq(schema.flavorIdColumn, flavorKey)
+      .single<Row>();
+
+    if (sourceFlavorError || !sourceFlavor) {
+      throw new Error(sourceFlavorError?.message ?? "Flavor not found.");
+    }
+
+    const sourceFlavorView = flavorViewModel(sourceFlavor, schema);
+    const uniqueName = await buildUniqueFlavorName(adminClient, schema, sourceFlavorView.name);
+
+    const { data: createdFlavor, error: createFlavorError } = await adminClient
+      .from("humor_flavors")
+      .insert(
+        buildFlavorPayload(
+          schema,
+          { name: uniqueName, description: sourceFlavorView.description },
+          actorId,
+          "create"
+        )
+      )
+      .select("*")
+      .single<Row>();
+
+    if (createFlavorError || !createdFlavor) {
+      throw new Error(createFlavorError?.message ?? "Unable to create duplicate flavor.");
+    }
+
+    const newFlavorId = coercePrimaryKey(
+      pickFirstField(createdFlavor, [schema.flavorIdColumn, "id", "humor_flavor_id"]),
+      "Flavor"
+    );
+
+    let stepQuery = adminClient
+      .from("humor_flavor_steps")
+      .select("*")
+      .eq(schema.stepFlavorIdColumn, flavorKey);
+
+    if (schema.stepOrderColumn) {
+      stepQuery = stepQuery.order(schema.stepOrderColumn, { ascending: true });
+    }
+
+    const { data: sourceSteps, error: sourceStepsError } = await stepQuery;
+
+    if (sourceStepsError) {
+      throw new Error(sourceStepsError.message);
+    }
+
+    const stepRows = toRowArray(sourceSteps);
+
+    if (stepRows.length) {
+      const duplicateSteps = stepRows.map((step, index) =>
+        cloneStepPayload(step, schema, actorId, newFlavorId, index + 1)
+      );
+
+      const { error: duplicateStepsError } = await adminClient
+        .from("humor_flavor_steps")
+        .insert(duplicateSteps);
+
+      if (duplicateStepsError) {
+        throw new Error(duplicateStepsError.message);
+      }
+    }
+
+    revalidatePath("/");
+    redirectWithMessage("success", `Humor flavor duplicated as ${uniqueName}.`, newFlavorId);
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithMessage(
+      "error",
+      error instanceof Error ? error.message : "Unable to duplicate flavor.",
       typeof flavorId === "string" ? flavorId : null
     );
   }

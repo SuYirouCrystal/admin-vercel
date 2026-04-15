@@ -18,6 +18,13 @@ type LeaderboardRow = {
   count: number;
 };
 
+type RatedCaptionRow = {
+  key: string;
+  label: string;
+  count: number;
+  average: string;
+};
+
 function normalizeKey(raw: unknown): string {
   return valueAsString(raw).trim() || "unknown";
 }
@@ -30,6 +37,17 @@ function rowUserId(row: Row): string {
 
 function rowImageId(row: Row): string {
   return normalizeKey(pickFirstField(row, ["image_id", "photo_id", "asset_id", "id"]));
+}
+
+function rowCaptionId(row: Row): string {
+  return normalizeKey(pickFirstField(row, ["caption_id", "captionId", "id"]));
+}
+
+function rowVoteValue(row: Row): number | null {
+  const rawValue = pickFirstField(row, ["vote_value", "value", "rating", "score"]);
+  const numericValue = Number(valueAsString(rawValue));
+
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function rowCreatedAt(row: Row): string {
@@ -61,6 +79,43 @@ function buildLeaderboard(
     .slice(0, 5);
 }
 
+function buildRatedCaptionLeaderboard(
+  counts: Map<string, number>,
+  sums: Map<string, number>,
+  captionLabelById: Map<string, string>
+): RatedCaptionRow[] {
+  return [...counts.entries()]
+    .map(([key, count]) => {
+      const sum = sums.get(key) ?? 0;
+      const average = count ? (sum / count).toFixed(1) : "0.0";
+
+      return {
+        key,
+        label: captionLabelById.get(key) ?? key,
+        count,
+        average,
+      };
+    })
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 5);
+}
+
+function captionPreview(row: Row): string {
+  const text = valueAsString(
+    pickFirstField(row, ["content", "caption", "text", "body", "value"])
+  ).trim();
+
+  if (!text) {
+    return "Untitled caption";
+  }
+
+  if (text.length <= 72) {
+    return text;
+  }
+
+  return `${text.slice(0, 69)}...`;
+}
+
 function weekdayName(rawDate: string): string {
   const date = new Date(rawDate);
   if (Number.isNaN(date.getTime())) {
@@ -72,15 +127,33 @@ function weekdayName(rawDate: string): string {
 export default async function AdminDashboardPage() {
   const { adminClient } = await requireSuperadmin();
 
-  const [profilesResult, imagesResult, captionsResult] = await Promise.all([
+  const [profilesResult, imagesResult, captionsResult, captionVotesResult] = await Promise.all([
     adminClient.from("profiles").select("*").limit(4000),
     adminClient.from("images").select("*").limit(4000),
     adminClient.from("captions").select("*").limit(4000),
+    adminClient.from("caption_votes").select("*").limit(4000),
   ]);
+
+  if (profilesResult.error) {
+    throw new Error(profilesResult.error.message);
+  }
+
+  if (imagesResult.error) {
+    throw new Error(imagesResult.error.message);
+  }
+
+  if (captionsResult.error) {
+    throw new Error(captionsResult.error.message);
+  }
+
+  if (captionVotesResult.error) {
+    throw new Error(captionVotesResult.error.message);
+  }
 
   const profiles = toRowArray(profilesResult.data);
   const images = toRowArray(imagesResult.data);
   const captions = toRowArray(captionsResult.data);
+  const captionVotes = toRowArray(captionVotesResult.data);
 
   const profileLabelById = new Map<string, string>();
   for (const profile of profiles) {
@@ -97,6 +170,11 @@ export default async function AdminDashboardPage() {
   for (const caption of captions) {
     const key = rowUserId(caption);
     captionAuthors.set(key, (captionAuthors.get(key) ?? 0) + 1);
+  }
+
+  const captionLabelById = new Map<string, string>();
+  for (const caption of captions) {
+    captionLabelById.set(rowCaptionId(caption), captionPreview(caption));
   }
 
   const captionsByImage = new Set(captions.map((caption) => rowImageId(caption)));
@@ -128,8 +206,41 @@ export default async function AdminDashboardPage() {
     ? (captions.length / images.length).toFixed(2)
     : "0.00";
 
+  const ratingsByCaption = new Map<string, number>();
+  const ratingSumsByCaption = new Map<string, number>();
+  const ratingsByUser = new Map<string, number>();
+  let totalVoteValue = 0;
+  let voteValueCount = 0;
+
+  for (const vote of captionVotes) {
+    const captionKey = rowCaptionId(vote);
+    ratingsByCaption.set(captionKey, (ratingsByCaption.get(captionKey) ?? 0) + 1);
+
+    const voteValue = rowVoteValue(vote);
+    if (voteValue !== null) {
+      ratingSumsByCaption.set(captionKey, (ratingSumsByCaption.get(captionKey) ?? 0) + voteValue);
+      totalVoteValue += voteValue;
+      voteValueCount += 1;
+    }
+
+    const userKey = rowUserId(vote);
+    ratingsByUser.set(userKey, (ratingsByUser.get(userKey) ?? 0) + 1);
+  }
+
+  const ratedCaptionCount = [...ratingsByCaption.keys()].filter((key) => key !== "unknown").length;
+  const ratingCoverage = captions.length
+    ? Math.round((ratedCaptionCount / captions.length) * 100)
+    : 0;
+  const averageVoteValue = voteValueCount ? (totalVoteValue / voteValueCount).toFixed(1) : "0.0";
+
   const uploaderLeaderboard = buildLeaderboard(imageOwners, profileLabelById);
   const captionerLeaderboard = buildLeaderboard(captionAuthors, profileLabelById);
+  const raterLeaderboard = buildLeaderboard(ratingsByUser, profileLabelById);
+  const ratedCaptionLeaderboard = buildRatedCaptionLeaderboard(
+    ratingsByCaption,
+    ratingSumsByCaption,
+    captionLabelById
+  );
 
   return (
     <main className="space-y-6 pb-10">
@@ -156,6 +267,38 @@ export default async function AdminDashboardPage() {
           <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Coverage</p>
           <p className="mt-2 text-3xl font-bold text-slate-900">{captionCoverage}%</p>
           <p className="mt-2 text-sm text-slate-600">Images with at least one caption</p>
+        </article>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Caption Ratings</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{captionVotes.length}</p>
+          <p className="mt-2 text-sm text-slate-600">Vote rows recorded so far</p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Rated Captions</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{ratedCaptionCount}</p>
+          <p className="mt-2 text-sm text-slate-600">{ratingCoverage}% of captions have ratings</p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Average Score</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{averageVoteValue}</p>
+          <p className="mt-2 text-sm text-slate-600">Across every numeric vote value found</p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Most Rated Caption</p>
+          <p className="mt-2 text-lg font-bold text-slate-900">
+            {ratedCaptionLeaderboard[0]?.count ?? 0} votes
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            {ratedCaptionLeaderboard[0]
+              ? `${ratedCaptionLeaderboard[0].average} avg · ${ratedCaptionLeaderboard[0].label}`
+              : "No caption ratings yet"}
+          </p>
         </article>
       </section>
 
@@ -197,19 +340,20 @@ export default async function AdminDashboardPage() {
 
         <article className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-100 p-6 shadow-sm">
           <p className="text-xs font-semibold tracking-wide text-amber-700 uppercase">
-            Data Quality Signal
+            Rating Signal
           </p>
-          <h2 className="mt-2 text-2xl font-bold text-amber-950">Uncaptioned inventory</h2>
+          <h2 className="mt-2 text-2xl font-bold text-amber-950">Caption rating coverage</h2>
           <p className="mt-3 text-sm text-amber-900">
-            {Math.max(images.length - imagesWithCaptions, 0)} images still need captions.
+            {ratedCaptionCount} captions have been rated at least once out of {captions.length}.
           </p>
           <p className="mt-2 text-sm text-amber-900">
-            Use the images tab to curate records or clean invalid uploads.
+            Average visible score is {averageVoteValue}. Use the captions tab to inspect which
+            captions are getting the most attention.
           </p>
         </article>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">Top uploaders</h3>
           <ul className="mt-4 space-y-3">
@@ -242,6 +386,42 @@ export default async function AdminDashboardPage() {
               ))
             ) : (
               <li className="text-sm text-slate-500">No caption activity yet.</li>
+            )}
+          </ul>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Most rated captions</h3>
+          <ul className="mt-4 space-y-3">
+            {ratedCaptionLeaderboard.length ? (
+              ratedCaptionLeaderboard.map((row) => (
+                <li key={row.key} className="rounded-xl border border-slate-200 px-3 py-2">
+                  <p className="text-sm font-medium text-slate-700">{row.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {row.count} votes · {row.average} avg
+                  </p>
+                </li>
+              ))
+            ) : (
+              <li className="text-sm text-slate-500">No caption ratings yet.</li>
+            )}
+          </ul>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Most active raters</h3>
+          <ul className="mt-4 space-y-3">
+            {raterLeaderboard.length ? (
+              raterLeaderboard.map((row) => (
+                <li key={row.key} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                  <span className="text-sm font-medium text-slate-700">{row.label}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800">
+                    {row.count}
+                  </span>
+                </li>
+              ))
+            ) : (
+              <li className="text-sm text-slate-500">No rating activity yet.</li>
             )}
           </ul>
         </article>

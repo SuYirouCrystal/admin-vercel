@@ -7,6 +7,7 @@ import {
   createStepAction,
   deleteFlavorAction,
   deleteStepAction,
+  duplicateFlavorAction,
   moveStepAction,
   updateFlavorAction,
   updateStepAction,
@@ -289,15 +290,27 @@ export default async function HomePage({
                     </h2>
                   </div>
 
-                  <form action={deleteFlavorAction}>
-                    <input type="hidden" name="flavorId" value={asIdString(selectedFlavor.id)} />
-                    <button
-                      type="submit"
-                      className="rounded-2xl border border-rose-300/60 bg-[color:var(--danger-soft)] px-4 py-2 text-sm font-semibold text-rose-700 transition hover:brightness-105 dark:text-rose-200"
-                    >
-                      Delete flavor
-                    </button>
-                  </form>
+                  <div className="flex flex-wrap gap-2">
+                    <form action={duplicateFlavorAction}>
+                      <input type="hidden" name="flavorId" value={asIdString(selectedFlavor.id)} />
+                      <button
+                        type="submit"
+                        className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-muted)] px-4 py-2 text-sm font-semibold text-[color:var(--foreground)] transition hover:border-[color:var(--secondary)]"
+                      >
+                        Duplicate flavor
+                      </button>
+                    </form>
+
+                    <form action={deleteFlavorAction}>
+                      <input type="hidden" name="flavorId" value={asIdString(selectedFlavor.id)} />
+                      <button
+                        type="submit"
+                        className="rounded-2xl border border-rose-300/60 bg-[color:var(--danger-soft)] px-4 py-2 text-sm font-semibold text-rose-700 transition hover:brightness-105 dark:text-rose-200"
+                      >
+                        Delete flavor
+                      </button>
+                    </form>
+                  </div>
                 </div>
 
                 <form action={updateFlavorAction} className="mt-5 grid gap-4">
