@@ -116,6 +116,9 @@ export default async function HomePage({
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[color:var(--accent)]">
               Prompt Chain Tool
             </p>
+            <p className="inline-flex rounded-full border border-amber-400/70 bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-900">
+              Prompt debug marker ffbd2a4
+            </p>
             <h1 className="text-4xl font-semibold text-[color:var(--foreground)] md:text-5xl">
               Flavor Matrix
             </h1>
