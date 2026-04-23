@@ -21,6 +21,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Deployment marker: this file was intentionally touched to force a fresh Vercel build.
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 type CaptionRow = {
